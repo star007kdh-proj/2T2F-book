@@ -19,7 +19,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(ROOT, "src", "book.md")
 SITE_TITLE = "2T2F Book"
 SITE_SUBTITLE = "한 사이클에 두 블록: 2-taken과 2-fetch 교과서"
-REPO_URL = "https://github.com/star007kdh-proj/2t2f-book"
+REPO_URL = "https://github.com/star007kdh-proj/2T2F-book"
 
 # 실험 N -> widget id (inserted right after the experiment heading)
 WIDGETS = {1: "supply", 3: "conf", 4: "phr", 5: "guard", 6: "meta", 7: "model"}
