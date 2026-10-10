@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>7장 · 숫자 읽는 법 — 2T2F Book</title>
+<meta name="description" content="한 사이클에 두 블록: 2-taken과 2-fetch 교과서">
+<link rel="stylesheet" href="../assets/book.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="목차" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="../index.html">2T2F Book</a>
+  <span class="topline">7장 · 숫자 읽는 법</span>
+</header>
+<div class="layout">
+<nav class="side">
+  <div class="side-title">한 사이클에 두 블록: 2-taken과 2-fetch 교과서</div>
+  <ul><li><a href="../index.html">이 책을 읽는 법</a></li><li><a href="../chapters/ch1.html"><span class="n">1장</span> 블록 하나로는 왜 부족한가</a></li><li><a href="../chapters/ch2.html"><span class="n">2장</span> 기존 frontend는 어떻게 움직이는가</a></li><li><a href="../chapters/ch3.html"><span class="n">3장</span> 무엇을 바꿨나</a></li><li><a href="../chapters/ch4.html"><span class="n">4장</span> 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기</a></li><li><a href="../chapters/ch5.html"><span class="n">5장</span> 2-fetch: 캐시와 IFU가 블록 두 개를 한 번에 다루기</a></li><li><a href="../chapters/ch6.html"><span class="n">6장</span> 두 기능이 만나는 곳</a></li><li><a href="../chapters/ch7.html" class=cur><span class="n">7장</span> 숫자 읽는 법</a></li><li><a href="../chapters/ch8.html"><span class="n">8장</span> 종합</a></li></ul>
+  <div class="side-foot"><a href="https://github.com/star007kdh-proj/2t2f-book">소스</a></div>
+</nav>
+<main class="content">
+<h1>7장 · 숫자 읽는 법</h1>
+<p>이 장의 숫자는 두 종류다. 모델이 낸 기대 범위와 아직 채우지 않은 측정값이다. 둘을 섞지 않는다.</p>
+<p><strong>이 장에서 배우는 것</strong></p>
+<ul>
+<li>공급량 증가 비율이 왜 "1 + pair 발화율"로 환원되는지 설명할 수 있다.</li>
+<li>기대 범위 표의 가정을 열거하고, 어떤 가정이 깨지면 숫자가 어느 쪽으로 움직이는지 말할 수 있다.</li>
+<li>측정 방법을 perf counter 이름 수준에서 말할 수 있다.</li>
+</ul>
+<h2>7.1 비율은 발화율로 환원된다</h2>
+<p>변경 전 frontend는 사이클당 fetch block 1개를 공급한다. 변경 후에는 pair가 발화한 사이클에 블록 2개를 공급한다. 따라서 frontend가 막힘 없이 예측을 내는 사이클만 보면</p>
+<p>사이클당 명령어 수 비율 = 1 + (pair 발화 사이클 / 전체 예측 사이클)</p>
+<p>바이트 상한은 그대로 64바이트다. 늘어나는 것은 "짧은 taken 블록이 연속되는 구간"의 공급량이다. decode 폭이 8이라 이 구간이 바로 backend가 굶는 구간이다.</p>
+<p>이론 상한은 2배다. 매 사이클 pair가 발화할 때의 값이다. 실제로는 다음 조건이 발화율을 깎는다.</p>
+<ul>
+<li>두 블록이 모두 taken으로 끝나야 한다.</li>
+<li>두 블록의 크기 합이 64바이트 이하여야 한다.</li>
+<li>첫 분기가 return, indirect가 아니고 둘째 분기가 direct 또는 conditional이어야 한다.</li>
+<li>uBTB에 pair가 올라와 있고 confidence가 문턱을 넘어야 한다.</li>
+<li>S3 override, fetch hungry gate에 걸리지 않아야 한다.</li>
+</ul>
+<h2>실험 7 · 기대 범위 모델</h2>
+<div class="widget" data-widget="model"></div>
+
+<p><strong>설명용 모델.</strong> taken 분기 간격 X를 평균 L의 기하 분포로 가정한다. 블록 A와 B의 명령어 수 합이 64바이트 안에 들어갈 확률을 P(X₁ + X₂ ≤ ⌊64 / s⌋)로 계산하고, 여기에 uBTB pair hit률 h, 첫 분기 조건 통과율 85%, 둘째 분기 조건 통과율 85%를 곱한 것을 pair 발화율 q로 둔다. 비율은 1 + q다. ICache miss, ITLB miss, redirect 복구 사이클은 전후 모두 같다고 보고 제외한다. 측정값이 아니다.</p>
+<table>
+<thead>
+<tr>
+<th>taken 분기 간격 L</th>
+<th>평균 명령어 크기 s</th>
+<th>uBTB pair hit 50%</th>
+<th>hit 80%</th>
+<th>hit 100%</th>
+<th>조건 없는 상한</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6 명령어</td>
+<td>3B (C 확장)</td>
+<td>1.32배</td>
+<td>1.51배</td>
+<td>1.64배</td>
+<td>1.89배</td>
+</tr>
+<tr>
+<td>8 명령어</td>
+<td>3B</td>
+<td>1.27배</td>
+<td>1.44배</td>
+<td>1.55배</td>
+<td>1.76배</td>
+</tr>
+<tr>
+<td>10 명령어</td>
+<td>3B</td>
+<td>1.23배</td>
+<td>1.37배</td>
+<td>1.46배</td>
+<td>1.64배</td>
+</tr>
+<tr>
+<td>14 명령어</td>
+<td>3B</td>
+<td>1.16배</td>
+<td>1.26배</td>
+<td>1.32배</td>
+<td>1.45배</td>
+</tr>
+<tr>
+<td>8 명령어</td>
+<td>4B (C 미사용)</td>
+<td>1.22배</td>
+<td>1.35배</td>
+<td>1.44배</td>
+<td>1.61배</td>
+</tr>
+<tr>
+<td>10 명령어</td>
+<td>4B</td>
+<td>1.18배</td>
+<td>1.28배</td>
+<td>1.35배</td>
+<td>1.49배</td>
+</tr>
+</tbody>
+</table>
+<p><strong>그림 읽는 법.</strong> 행을 따라 내려가면 간격이 길어질수록 이득이 줄어든다. 긴 블록은 혼자서도 decode 폭을 채우고, 둘을 합치면 64바이트를 넘기 쉽다. 열을 따라 오른쪽으로 가면 uBTB hit률이 이득을 정한다.</p>
+<p><strong>해 볼 것.</strong> 정수 코드의 일반적인 taken 분기 간격 8~10 명령어, uBTB pair hit 50~80%를 넣어 보자. 1.2~1.45배 범위가 나온다. 이제 명령어 크기를 3B에서 4B로 바꿔 보자. 같은 간격에서 이득이 줄어든다. 블록이 바이트 단위로 커져 64바이트 제한에 더 자주 걸리기 때문이다.</p>
+<h2>7.2 어떻게 재는가</h2>
+<p>측정값은 아직 비어 있다. 채울 때는 다음 방법을 쓴다.</p>
+<ul>
+<li><strong>사이클당 공급 명령어 수</strong> = IBuffer enqueue 명령어 수 / frontend가 예측을 낸 사이클 수. IBuffer에 <code>PopCount(enq valid)</code> 누적 카운터를 추가해 측정한다.</li>
+<li><strong>발화율</strong> = <code>pairFireToFtq</code> / BPU <code>s1_fire</code> 사이클 수. 위 비율의 "1 + 발화율"과 일치해야 한다.</li>
+<li><strong>블록 수 기준 비율</strong> = IFU <code>ifu_req</code> / IFU가 fetch를 낸 사이클 수.</li>
+<li>같은 워크로드를 <code>EnableTwoTaken = false</code>, <code>FetchPorts = 1</code>로 다시 돌려 분모와 분자를 각각 비교한다.</li>
+</ul>
+<p>측정 결과를 적을 때는 다음을 함께 적는다. config, 워크로드, 시뮬레이션 구간, IPC 변화, MPKI 변화, pair 발화율과 pair second 정확도, 2-prefetch와 2-fetch 발동 비율.</p>
+<h2>핵심 정리</h2>
+<ol>
+<li>공급량 비율은 "1 + pair 발화율"이다. 발화율을 깎는 조건 다섯 가지가 실제 이득을 정한다.</li>
+<li>모델의 기대 범위는 1.2~1.45배다. 조건은 간격 8~10 명령어, hit 50~80%, 3바이트 명령어다.</li>
+<li>이 장의 숫자는 모델값이다. 측정값은 config와 워크로드와 함께 적어야 비교할 수 있다.</li>
+</ol>
+<h2>확인 퀴즈</h2>
+<ol>
+<li>발화율이 30%일 때 사이클당 명령어 수 비율은?</li>
+<li>같은 taken 분기 간격에서 C 확장을 끄면 이득이 줄어드는 이유는?</li>
+</ol>
+<details>
+<summary>답</summary>
+<ol>
+<li>1.3배. 막힘 없이 예측을 내는 사이클만 본 값이다.</li>
+<li>명령어가 커져 블록의 바이트 수가 늘고, 두 블록의 합이 64바이트를 넘는 경우가 많아진다.</li>
+</ol>
+</details>
+<div class="prevnext"><a class="prev" href="../chapters/ch6.html">← 6장 · 두 기능이 만나는 곳</a><a class="next" href="../chapters/ch8.html">8장 · 종합 →</a></div>
+</main>
+</div>
+<script src="../assets/book.js"></script>
+</body>
+</html>

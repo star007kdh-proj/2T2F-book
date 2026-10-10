@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3장 · 무엇을 바꿨나 — 2T2F Book</title>
+<meta name="description" content="한 사이클에 두 블록: 2-taken과 2-fetch 교과서">
+<link rel="stylesheet" href="../assets/book.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="목차" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="../index.html">2T2F Book</a>
+  <span class="topline">3장 · 무엇을 바꿨나</span>
+</header>
+<div class="layout">
+<nav class="side">
+  <div class="side-title">한 사이클에 두 블록: 2-taken과 2-fetch 교과서</div>
+  <ul><li><a href="../index.html">이 책을 읽는 법</a></li><li><a href="../chapters/ch1.html"><span class="n">1장</span> 블록 하나로는 왜 부족한가</a></li><li><a href="../chapters/ch2.html"><span class="n">2장</span> 기존 frontend는 어떻게 움직이는가</a></li><li><a href="../chapters/ch3.html" class=cur><span class="n">3장</span> 무엇을 바꿨나</a></li><li><a href="../chapters/ch4.html"><span class="n">4장</span> 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기</a></li><li><a href="../chapters/ch5.html"><span class="n">5장</span> 2-fetch: 캐시와 IFU가 블록 두 개를 한 번에 다루기</a></li><li><a href="../chapters/ch6.html"><span class="n">6장</span> 두 기능이 만나는 곳</a></li><li><a href="../chapters/ch7.html"><span class="n">7장</span> 숫자 읽는 법</a></li><li><a href="../chapters/ch8.html"><span class="n">8장</span> 종합</a></li></ul>
+  <div class="side-foot"><a href="https://github.com/star007kdh-proj/2t2f-book">소스</a></div>
+</nav>
+<main class="content">
+<h1>3장 · 무엇을 바꿨나</h1>
+<p>4장과 5장을 읽기 전에 변경 전체를 한 장으로 본다. 번호는 그림과 표에서 같다.</p>
+<p><strong>이 장에서 배우는 것</strong></p>
+<ul>
+<li>열 곳의 변경이 각각 2-taken, 2-fetch, 둘의 접점 중 어디에 속하는지 분류할 수 있다.</li>
+<li>바뀌지 않은 것이 무엇인지 말할 수 있다.</li>
+</ul>
+<p><img alt="그림 3-1" src="../figures/fig03_fe_2t2f.png" /></p>
+<p><strong>그림 3-1.</strong> 2-taken과 2-fetch가 바꾼 부분. 번호는 아래 표와 대응한다.</p>
+<table>
+<thead>
+<tr>
+<th>번호</th>
+<th>위치</th>
+<th>변경 내용</th>
+<th>장·절</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>BPU S0</td>
+<td>pair fire 때 시작 PC가 BR2 target(블록 C)으로 바로 넘어간다</td>
+<td>4.4</td>
+</tr>
+<tr>
+<td>2</td>
+<td>BPU S1</td>
+<td>uBTB 엔트리에 slot2 추가. emit gate가 pair 발화 여부를 정한다</td>
+<td>4.2~4.4</td>
+</tr>
+<tr>
+<td>3</td>
+<td>분기 history</td>
+<td>pair 1회의 결과가 single 2회와 같아지도록 갱신한다</td>
+<td>4.6</td>
+</tr>
+<tr>
+<td>4</td>
+<td>FTQ enqueue</td>
+<td>한 사이클에 엔트리 2개를 쓰고 bpuPtr를 2 올린다</td>
+<td>4.5</td>
+</tr>
+<tr>
+<td>5</td>
+<td>FTQ 발행</td>
+<td>pfPtr와 fetchPtr가 한 번에 2씩 진행할 수 있다. 안전거리 guard 추가</td>
+<td>5.2</td>
+</tr>
+<tr>
+<td>6</td>
+<td>PrefetchPipe</td>
+<td>요청 하나에 블록 2개. MetaArray 2포트를 나눠 쓴다</td>
+<td>5.3</td>
+</tr>
+<tr>
+<td>7</td>
+<td>WayLookup</td>
+<td>한 사이클에 2개 쓰고 2개 읽는다</td>
+<td>5.4</td>
+</tr>
+<tr>
+<td>8</td>
+<td>MainPipe</td>
+<td>req(0), req(1) 두 블록을 함께 처리한다</td>
+<td>5.4</td>
+</tr>
+<tr>
+<td>9</td>
+<td>IFU</td>
+<td>두 블록의 명령어를 하나의 열로 합친다</td>
+<td>5.5</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Backend</td>
+<td>pcMem에 두 번째 write port 추가. 예측 target 전용 targetMem 추가</td>
+<td>6.3</td>
+</tr>
+</tbody>
+</table>
+<p><strong>바뀌지 않은 것.</strong> aBTB, uTAGE, mBTB, TAGE, SC, ITTAGE의 내부 구조. IBuffer와 backend 실행 경로. 특히 S2, S3 예측기에 두 번째 읽기 포트를 달지 않았다. 4장의 Limited 정책이 그 이유다.</p>
+<p><img alt="그림 3-2" src="../figures/fig04_single_vs_pair.png" /></p>
+<p><strong>그림 3-2.</strong> single 예측과 pair 예측의 FTQ 공급 비교. BPU 쪽에서만 본 2-taken의 효과다.</p>
+<h2>핵심 정리</h2>
+<ol>
+<li>변경은 1~4(2-taken), 5~9(2-fetch), 10(접점)으로 나뉜다.</li>
+<li>예측기 내부와 backend 실행 경로는 그대로다. 바뀐 것은 블록을 세고 옮기는 쪽이다.</li>
+</ol>
+<div class="prevnext"><a class="prev" href="../chapters/ch2.html">← 2장 · 기존 frontend는 어떻게 움직이는가</a><a class="next" href="../chapters/ch4.html">4장 · 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기 →</a></div>
+</main>
+</div>
+<script src="../assets/book.js"></script>
+</body>
+</html>

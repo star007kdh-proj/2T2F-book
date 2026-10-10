@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2장 · 기존 frontend는 어떻게 움직이는가 — 2T2F Book</title>
+<meta name="description" content="한 사이클에 두 블록: 2-taken과 2-fetch 교과서">
+<link rel="stylesheet" href="../assets/book.css">
+</head>
+<body>
+<header class="top">
+  <button class="menu" aria-label="목차" onclick="document.body.classList.toggle('nav-open')">☰</button>
+  <a class="brand" href="../index.html">2T2F Book</a>
+  <span class="topline">2장 · 기존 frontend는 어떻게 움직이는가</span>
+</header>
+<div class="layout">
+<nav class="side">
+  <div class="side-title">한 사이클에 두 블록: 2-taken과 2-fetch 교과서</div>
+  <ul><li><a href="../index.html">이 책을 읽는 법</a></li><li><a href="../chapters/ch1.html"><span class="n">1장</span> 블록 하나로는 왜 부족한가</a></li><li><a href="../chapters/ch2.html" class=cur><span class="n">2장</span> 기존 frontend는 어떻게 움직이는가</a></li><li><a href="../chapters/ch3.html"><span class="n">3장</span> 무엇을 바꿨나</a></li><li><a href="../chapters/ch4.html"><span class="n">4장</span> 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기</a></li><li><a href="../chapters/ch5.html"><span class="n">5장</span> 2-fetch: 캐시와 IFU가 블록 두 개를 한 번에 다루기</a></li><li><a href="../chapters/ch6.html"><span class="n">6장</span> 두 기능이 만나는 곳</a></li><li><a href="../chapters/ch7.html"><span class="n">7장</span> 숫자 읽는 법</a></li><li><a href="../chapters/ch8.html"><span class="n">8장</span> 종합</a></li></ul>
+  <div class="side-foot"><a href="https://github.com/star007kdh-proj/2t2f-book">소스</a></div>
+</nav>
+<main class="content">
+<h1>2장 · 기존 frontend는 어떻게 움직이는가</h1>
+<p>뒤 장을 읽는 데 필요한 만큼만 정리한다. 이미 아는 독자는 2.5절의 손실 사이클 표만 보고 넘어가도 된다.</p>
+<p><strong>이 장에서 배우는 것</strong></p>
+<ul>
+<li>BPU 네 스테이지가 각각 무엇을 읽고 무엇을 쓰는지 말할 수 있다.</li>
+<li>FTQ의 포인터 네 개가 같은 큐 위에서 어떤 순서로 움직이는지 그릴 수 있다.</li>
+<li>예측이 틀렸을 때 어디서 발견되는지에 따라 손실 사이클이 얼마나 달라지는지 계산할 수 있다.</li>
+</ul>
+<p><img alt="그림 2-1" src="../figures/fig02_fe_baseline.png" /></p>
+<p><strong>그림 2-1.</strong> 기존 frontend 스테이지 블록도.</p>
+<h2>BPU는 어디서 빠르고 어디서 정확한가</h2>
+<p>BPU는 네 스테이지다. 빠른 예측과 정확한 예측이 다른 스테이지에서 나온다.</p>
+<ul>
+<li><strong>S0.</strong> 다음에 예측할 블록의 시작 PC를 고르고 예측기 읽기를 시작한다.</li>
+<li><strong>S1.</strong> uBTB, aBTB, uTAGE로 빠른 예측을 만들어 FTQ에 바로 기록한다. 이 target이 다음 사이클의 시작 PC가 된다.</li>
+<li><strong>S2.</strong> mBTB, TAGE 등의 SRAM 읽기 결과를 모은다.</li>
+<li><strong>S3.</strong> TAGE, SC, ITTAGE, RAS로 최종 예측을 만든다. S1 예측과 다르면 <strong>override</strong>가 발생하고 FTQ를 되감아 다시 쓴다.</li>
+</ul>
+<p>여기서 하나를 기억해 두자. <strong>예측기는 사이클당 블록 1개만 읽을 수 있다.</strong> 2-taken 설계는 이 제약에서 출발한다.</p>
+<h2>FTQ 위를 움직이는 네 포인터</h2>
+<p>FTQ는 64 엔트리 원형 큐다. 엔트리 하나가 fetch block 하나다. 포인터 네 개가 같은 큐 위를 순서대로 따라간다.</p>
+<table>
+<thead>
+<tr>
+<th>포인터</th>
+<th>뜻</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>bpuPtr</td>
+<td>BPU가 다음 예측을 쓸 위치</td>
+</tr>
+<tr>
+<td>pfPtr</td>
+<td>다음에 ICache prefetch를 보낼 위치</td>
+</tr>
+<tr>
+<td>fetchPtr</td>
+<td>다음에 fetch를 보낼 위치</td>
+</tr>
+<tr>
+<td>commitPtr</td>
+<td>backend가 commit을 마친 위치</td>
+</tr>
+</tbody>
+</table>
+<p>엔트리 본체인 시작 PC와 taken 분기 위치는 S1에 기록된다. 예측기 meta는 같은 블록이 S3에 도달했을 때 기록된다. 한 엔트리가 두 번에 걸쳐 채워진다는 점이 뒤에서 중요해진다.</p>
+<h2>ICache는 왜 두 번 조회하는가</h2>
+<ul>
+<li><strong>PrefetchPipe.</strong> FTQ의 pfPtr 엔트리를 받아 ITLB와 MetaArray를 조회한다. 어느 way에 있는지(waymask)를 WayLookup에 기록하고, miss면 MissUnit에 미리 요청한다.</li>
+<li><strong>WayLookup.</strong> 32 엔트리 FIFO. PrefetchPipe가 구한 waymask를 MainPipe가 쓸 때까지 보관한다.</li>
+<li><strong>MainPipe.</strong> FTQ의 fetchPtr 엔트리와 WayLookup의 waymask로 DataArray를 읽어 IFU에 넘긴다.</li>
+</ul>
+<p>핵심은 주소 변환과 tag 비교를 prefetch 단계에서 미리 끝내 둔다는 점이다. MainPipe는 데이터만 읽는다.</p>
+<h2>IFU는 무엇을 검사하는가</h2>
+<ul>
+<li><strong>S0.</strong> 명령어 경계를 찾고 유효 명령어를 앞으로 모은다(compact).</li>
+<li><strong>S1.</strong> 블록 경계에 걸친 명령어를 이어 붙이고 PC를 만든다.</li>
+<li><strong>S2.</strong> predecode로 예측을 검사한다. 틀리면 predecode redirect를 FTQ로 보낸다. 결과는 IBuffer에 들어간다.</li>
+</ul>
+<h2>실험 2 · 틀린 자리에 따라 손실 사이클 세기</h2>
+<p><img alt="그림 2-2" src="../figures/fig02b_pipeline_penalty.png" /></p>
+<p><strong>그림 2-2.</strong> 파이프라인 스테이지와 경우별 손실 사이클. backend에 stall이 없다고 가정한다.</p>
+<p><strong>설명용 모델.</strong> FTQ, WayLookup, IBuffer가 비어 있고 backend가 막히지 않는다고 가정한다. 평소에는 이 큐들에 블록이 쌓여 있어 지연이 가려진다.</p>
+<p>스테이지를 먼저 세자. frontend는 BP S0부터 IFU S2까지 7 스테이지다. BP S2와 S3은 fetch와 나란히 진행된다. S1 예측으로 먼저 fetch를 시작하고 S3이 뒤에서 검증하는 구조다. 분기는 Dec, Ren, Dis, Iss, RR, Bypass를 거쳐 Exe에서 풀린다. BP S0부터 세면 14번째 스테이지다.</p>
+<p>손실은 "틀리지 않았다면 다음 명령어가 그 스테이지에 있었을 시점"과 비교한 값이다.</p>
+<table>
+<thead>
+<tr>
+<th>경우</th>
+<th>손실 사이클</th>
+<th>계산</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S1 예측이 맞음</td>
+<td>0</td>
+<td>S1의 target이 같은 사이클에 다음 블록의 S0 PC가 된다</td>
+</tr>
+<tr>
+<td>S3 override</td>
+<td>2</td>
+<td>S3에 도달한 사이클에 S0 PC를 교정한다. 그사이 S1, S2에 들어온 뒤 블록 2개를 버린다</td>
+</tr>
+<tr>
+<td>predecode redirect</td>
+<td>6</td>
+<td>전달 2사이클(IFU write back, FTQ) + BP S0에서 IFU S2까지 5사이클 − 1</td>
+</tr>
+<tr>
+<td>backend redirect</td>
+<td>13</td>
+<td>전달 2사이클(Redirect gen, FTQ 도착) + BP S0에서 Exe까지 12사이클 − 1</td>
+</tr>
+</tbody>
+</table>
+<p><strong>해 볼 것.</strong> 표의 마지막 행을 보자. pair의 두 번째 분기 BR2는 S3 예측기를 거치지 않는다(4장). BR2가 틀리면 어느 행으로 떨어지는가. backend redirect, 13 사이클이다. 이 숫자가 4장에서 pair를 보수적으로 내는 이유가 된다.</p>
+<p><strong>조건에 따라 달라지는 것.</strong> 위 값은 기본 경로다. 다음 조건이 사이클을 더하거나 뺀다.</p>
+<ul>
+<li>prefetch bypass. redirect 다음 사이클에 FTQ가 target을 PrefetchPipe로 바로 보낸다. redirect가 연달아 오면 bypass가 나가지 않아 1사이클이 더해진다.</li>
+<li>ftqIdx 선행 전달. backend는 redirect보다 한 사이클 먼저 ftqIdx를 보낸다. ROB flush처럼 선행 전달이 없는 redirect는 1사이클이 더해진다.</li>
+<li>WayLookup bypass. WayLookup이 비어 있고 single prefetch일 때 PF S1과 MP S0이 같은 사이클에 진행된다.</li>
+<li>ITLB miss, ICache miss, backend의 operand 대기와 issue 경쟁은 그만큼 더해진다.</li>
+</ul>
+<h2>핵심 정리</h2>
+<ol>
+<li>S1은 빠르고 S3은 정확하다. S1 예측으로 fetch를 먼저 시작하고 S3이 뒤에서 검증한다.</li>
+<li>예측기는 사이클당 블록 1개만 읽는다. 이 제약이 2-taken 설계의 출발점이다.</li>
+<li>FTQ 엔트리는 S1에 본체가, S3에 meta가 기록된다. 두 번에 걸쳐 채워진다.</li>
+<li>틀린 자리가 뒤로 갈수록 비싸다. S3 override 2, predecode 6, backend 13 사이클이다.</li>
+</ol>
+<h2>확인 퀴즈</h2>
+<ol>
+<li>S3 override가 버리는 블록은 몇 개이고 왜 그 수인가?</li>
+<li>WayLookup이 없다면 MainPipe는 무엇을 더 해야 하는가?</li>
+<li>backend redirect 손실이 13인데, 분기가 Exe에서 풀린 뒤 올바른 target 명령어가 Exe에 도달하는 것은 몇 번째 사이클인가?</li>
+</ol>
+<details>
+<summary>답</summary>
+<ol>
+<li>2개. S1과 S2에 들어온 뒤 블록이다. S3에 도달한 사이클에 S0 PC를 바꾸므로 그 둘만 버린다.</li>
+<li>ITLB 조회와 MetaArray tag 비교. prefetch 단계가 미리 끝내 둔 것이 이 둘이다.</li>
+<li>14번째. 전달 2사이클과 BP S0에서 Exe까지 12사이클을 더한 값이다.</li>
+</ol>
+</details>
+<div class="prevnext"><a class="prev" href="../chapters/ch1.html">← 1장 · 블록 하나로는 왜 부족한가</a><a class="next" href="../chapters/ch3.html">3장 · 무엇을 바꿨나 →</a></div>
+</main>
+</div>
+<script src="../assets/book.js"></script>
+</body>
+</html>
