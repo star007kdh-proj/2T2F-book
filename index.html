@@ -16,7 +16,7 @@
 <div class="layout">
 <nav class="side">
   <div class="side-title">한 사이클에 두 블록: 2-taken과 2-fetch 교과서</div>
-  <ul><li><a href="index.html" class=cur>이 책을 읽는 법</a></li><li><a href="chapters/ch1.html"><span class="n">1장</span> 블록 하나로는 왜 부족한가</a></li><li><a href="chapters/ch2.html"><span class="n">2장</span> 기존 frontend는 어떻게 움직이는가</a></li><li><a href="chapters/ch3.html"><span class="n">3장</span> 무엇을 바꿨나</a></li><li><a href="chapters/ch4.html"><span class="n">4장</span> 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기</a></li><li><a href="chapters/ch5.html"><span class="n">5장</span> 2-fetch: 캐시와 IFU가 블록 두 개를 한 번에 다루기</a></li><li><a href="chapters/ch6.html"><span class="n">6장</span> 두 기능이 만나는 곳</a></li><li><a href="chapters/ch7.html"><span class="n">7장</span> 숫자 읽는 법</a></li><li><a href="chapters/ch8.html"><span class="n">8장</span> 종합</a></li></ul>
+  <ul><li><a href="index.html" class=cur>이 책을 읽는 법</a></li><li><a href="chapters/ch0.html"><span class="n">들어가며</span> 왜 한 사이클에 두 블록인가</a></li><li><a href="chapters/ch1.html"><span class="n">1장</span> 블록 하나로는 왜 부족한가</a></li><li><a href="chapters/ch2.html"><span class="n">2장</span> 기존 frontend는 어떻게 움직이는가</a></li><li><a href="chapters/ch3.html"><span class="n">3장</span> 무엇을 바꿨나</a></li><li><a href="chapters/ch4.html"><span class="n">4장</span> 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기</a></li><li><a href="chapters/ch5.html"><span class="n">5장</span> 2-fetch: 캐시와 IFU가 블록 두 개를 한 번에 다루기</a></li><li><a href="chapters/ch6.html"><span class="n">6장</span> 두 기능이 만나는 곳</a></li><li><a href="chapters/ch7.html"><span class="n">7장</span> 숫자 읽는 법</a></li><li><a href="chapters/ch8.html"><span class="n">8장</span> 한계와 남은 과제</a></li></ul>
   <div class="side-foot"><a href="https://github.com/star007kdh-proj/2T2F-book">소스</a></div>
 </nav>
 <main class="content">
@@ -26,14 +26,14 @@
 </blockquote>
 <p>프로세서는 분기의 답이 나오기 전에 다음 명령을 가져온다. Kunminghu V3의 frontend는 이 일을 사이클마다 fetch block 하나 단위로 한다. 분기가 촘촘한 코드에서는 블록 하나에 명령어가 한두 개밖에 들어가지 않는다. backend는 8개를 받을 준비가 되어 있는데 frontend가 두 개를 건네는 사이클이 생긴다.</p>
 <p>이 책은 그 간격을 어떻게 메웠는지를 다룬다. 2-taken은 한 사이클에 taken 분기 두 개를 예측한다. 2-fetch는 한 사이클에 fetch block 두 개를 캐시에서 꺼낸다. 두 기능은 따로 설계됐지만 함께 있어야 효과가 난다.</p>
-<p>같은 내용을 발표 자료 형식으로 정리한 문서가 <code>docs/2T2F_INTRO_KR.md</code>에 있다. 이 책은 그 문서의 내용을 장 단위로 다시 쓴 것이다. 수치와 코드 위치는 두 문서가 같은 기준을 따른다.</p>
+<p>같은 내용을 발표 자료 형식으로 정리한 문서(2-taken / 2-fetch 구현 소개)가 따로 있다. 이 책은 그 문서를 장 단위로 다시 쓴 것이다. 파라미터 이름, 성능 카운터, 파일 위치 같은 세부는 그 문서에 두고, 이 책은 구조와 이유만 다룬다.</p>
 <h2>이 책을 읽는 법</h2>
 <p><strong>대상.</strong> Kunminghu V3 frontend 코드를 읽을 수 있는 팀원. BPU, FTQ, ICache, IFU라는 이름이 낯설지 않으면 충분하다.</p>
-<p><strong>기준 코드.</strong> 본문은 <code>feat/p3_2taken_backend_targetmem</code>을 기준으로 설명한다. 2-taken, 2-fetch, targetMem이 모두 들어 있는 브랜치다. 이후 브랜치에서 바뀐 파라미터나 게이트는 이 책의 범위 밖이다.</p>
+<p><strong>기준 코드.</strong> 2-taken, 2-fetch, targetMem이 모두 들어 있는 구현을 기준으로 설명한다. 그 뒤에 바뀐 파라미터나 학습 조건은 이 책의 범위 밖이다.</p>
 <p><strong>실험.</strong> 각 장에는 "실험"이 있다. 종이와 연필로 돌려 볼 수 있는 축소 모델이다. 실제 RTL의 측정값이 아니다. 실험마다 "설명용 모델"이라는 고지를 붙였고, 실측치는 조건과 함께 따로 표시한다.</p>
 <p><strong>숫자.</strong> 이 책은 숫자를 인용할 때 항상 조건을 함께 적는다. 조건이 다른 숫자끼리 순위를 매기지 않는다.</p>
-<p><strong>그림.</strong> 그림은 <code>docs/figures/</code> 아래에 있다. <code>gen_2t2f_figures.py</code>를 실행하면 다시 만들 수 있다. 캡션은 "그림 장-번호" 형식이다.</p>
-<p><strong>고정 용어.</strong> 책 전체에서 다음 이름을 쓴다.</p>
+<p><strong>그림.</strong> 캡션은 "그림 장-번호" 형식이다. 모델로 그린 그림에는 "설명용"이라고 적었다.</p>
+<p><strong>고정 용어.</strong> 책 전체에서 다음 이름을 쓴다. 블록 A, B, C가 무엇인지는 들어가며의 그림 0-2에서 먼저 설명한다.</p>
 <table>
 <thead>
 <tr>
@@ -75,6 +75,11 @@
 </thead>
 <tbody>
 <tr>
+<td><a href="chapters/ch0.html">들어가며</a></td>
+<td><a href="chapters/ch0.html">왜 한 사이클에 두 블록인가</a></td>
+<td>무엇이 부족했고, 블록 A, B, C는 무엇인가</td>
+</tr>
+<tr>
 <td><a href="chapters/ch1.html">1</a></td>
 <td><a href="chapters/ch1.html">블록 하나로는 왜 부족한가</a></td>
 <td>사이클당 명령어 공급량은 무엇이 정하는가</td>
@@ -111,12 +116,12 @@
 </tr>
 <tr>
 <td><a href="chapters/ch8.html">8</a></td>
-<td><a href="chapters/ch8.html">종합</a></td>
-<td>파라미터, 카운터, 한계, 파일</td>
+<td><a href="chapters/ch8.html">한계와 남은 과제</a></td>
+<td>아직 못 한 것은 무엇인가</td>
 </tr>
 </tbody>
 </table>
-<div class="prevnext"><a class="next" href="chapters/ch1.html">1장 · 블록 하나로는 왜 부족한가 →</a></div>
+<div class="prevnext"><a class="next" href="chapters/ch0.html">들어가며 · 왜 한 사이클에 두 블록인가 →</a></div>
 </main>
 </div>
 <script src="assets/book.js"></script>

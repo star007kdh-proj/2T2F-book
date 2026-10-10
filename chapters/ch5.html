@@ -16,7 +16,7 @@
 <div class="layout">
 <nav class="side">
   <div class="side-title">한 사이클에 두 블록: 2-taken과 2-fetch 교과서</div>
-  <ul><li><a href="../index.html">이 책을 읽는 법</a></li><li><a href="../chapters/ch1.html"><span class="n">1장</span> 블록 하나로는 왜 부족한가</a></li><li><a href="../chapters/ch2.html"><span class="n">2장</span> 기존 frontend는 어떻게 움직이는가</a></li><li><a href="../chapters/ch3.html"><span class="n">3장</span> 무엇을 바꿨나</a></li><li><a href="../chapters/ch4.html"><span class="n">4장</span> 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기</a></li><li><a href="../chapters/ch5.html" class=cur><span class="n">5장</span> 2-fetch: 캐시와 IFU가 블록 두 개를 한 번에 다루기</a></li><li><a href="../chapters/ch6.html"><span class="n">6장</span> 두 기능이 만나는 곳</a></li><li><a href="../chapters/ch7.html"><span class="n">7장</span> 숫자 읽는 법</a></li><li><a href="../chapters/ch8.html"><span class="n">8장</span> 종합</a></li></ul>
+  <ul><li><a href="../index.html">이 책을 읽는 법</a></li><li><a href="../chapters/ch0.html"><span class="n">들어가며</span> 왜 한 사이클에 두 블록인가</a></li><li><a href="../chapters/ch1.html"><span class="n">1장</span> 블록 하나로는 왜 부족한가</a></li><li><a href="../chapters/ch2.html"><span class="n">2장</span> 기존 frontend는 어떻게 움직이는가</a></li><li><a href="../chapters/ch3.html"><span class="n">3장</span> 무엇을 바꿨나</a></li><li><a href="../chapters/ch4.html"><span class="n">4장</span> 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기</a></li><li><a href="../chapters/ch5.html" class=cur><span class="n">5장</span> 2-fetch: 캐시와 IFU가 블록 두 개를 한 번에 다루기</a></li><li><a href="../chapters/ch6.html"><span class="n">6장</span> 두 기능이 만나는 곳</a></li><li><a href="../chapters/ch7.html"><span class="n">7장</span> 숫자 읽는 법</a></li><li><a href="../chapters/ch8.html"><span class="n">8장</span> 한계와 남은 과제</a></li></ul>
   <div class="side-foot"><a href="https://github.com/star007kdh-proj/2T2F-book">소스</a></div>
 </nav>
 <main class="content">
@@ -37,14 +37,14 @@
 <p><img alt="그림 5-1" src="../figures/fig10_icache_2fetch_path.png" /></p>
 <p><strong>그림 5-1.</strong> 2-prefetch와 2-fetch의 경로. WayLookup이 둘 사이의 완충이다.</p>
 <h2>5.2 FTQ는 언제 두 개를 내보내는가</h2>
-<p><strong>2-prefetch (<code>canTwoPrefetch</code>)</strong></p>
+<p><strong>2-prefetch 조건</strong></p>
 <ol>
 <li>bpuPtr와 pfPtr의 거리가 안전거리 guard보다 크다.</li>
 <li>두 블록이 같은 페이지에 있다. ITLB 포트를 하나만 쓰기 위함이다.</li>
 <li>두 블록 모두 backend가 알려 준 예외 대상이 아니다.</li>
 <li>MetaArray 포트 충돌이 없다(5.3).</li>
 </ol>
-<p><strong>2-fetch (<code>rawTwoFetchValid</code>)</strong></p>
+<p><strong>2-fetch 조건</strong></p>
 <ol>
 <li>bpuPtr와 fetchPtr의 거리가 guard보다 크다.</li>
 <li>두 블록의 크기 합이 64바이트 이하다. IFU가 한 번에 다루는 명령어 열의 크기 제한이다.</li>
@@ -137,12 +137,12 @@
 </tbody>
 </table>
 <p><strong>해 볼 것.</strong> fb0이 line 10 안에 있고 fb1이 line 12 안에 있다고 하자. 둘 다 짝수다. Interleave가 아니고 다른 경우에도 해당하지 않으므로 Conflict다. fb1을 line 13으로 옮기면 Interleave가 된다. 이제 fb0을 line 10과 11에 걸치게 하고 fb1을 line 11 안에 두자. Overlap1이다. fb0이 읽는 두 line에 fb1이 이미 들어 있다.</p>
-<p>PrefetchPipe S1은 두 포트의 읽기 결과를 경우에 맞게 두 블록에 나눠 준다(<code>generateReqMetaInfo</code>).</p>
+<p>PrefetchPipe S1은 두 포트의 읽기 결과를 경우에 맞게 두 블록에 나눠 준다.</p>
 <h2>5.4 WayLookup과 MainPipe</h2>
 <p><strong>WayLookup write.</strong> 2-prefetch면 한 사이클에 엔트리 2개를 쓴다. 두 번째 포트는 첫 번째 포트와 함께만 동작한다.</p>
-<p><strong>WayLookup read.</strong> fetch 요청이 오면 앞의 두 엔트리를 보고 실제로 2개를 내보낼지 정한다(<code>realTwoFetchValid</code>).</p>
+<p><strong>WayLookup read.</strong> fetch 요청이 오면 앞의 두 엔트리를 보고 실제로 2개를 내보낼지 정한다.</p>
 <ol>
-<li>FTQ가 두 번째 블록을 유효로 보냈다(<code>rawTwoFetchValid</code>).</li>
+<li>FTQ가 두 번째 블록을 유효로 보냈다.</li>
 <li>WayLookup에 엔트리가 2개 이상 있고 갱신 중이 아니다.</li>
 <li>DataArray 읽기 충돌이 없다. 같은 bank의 같은 way를 서로 다른 set으로 읽는 경우가 충돌이다.</li>
 <li>두 블록 모두 MMIO가 아니고 ITLB 예외가 없다.</li>
@@ -152,7 +152,7 @@
 <p><img alt="그림 5-4" src="../figures/fig13_2prefetch_2fetch_timing.png" /></p>
 <p><strong>그림 5-4.</strong> 2-prefetch에서 2-fetch까지의 사이클 타이밍.</p>
 <h2>5.5 IFU는 두 블록을 하나의 열로 만든다</h2>
-<p>S0에서 두 블록의 명령어 경계를 한 번에 계산하고, 유효 명령어를 하나의 열로 모은다(InstrCompact). 각 명령어는 어느 블록 소속인지 표시를 가진다.</p>
+<p>S0에서 두 블록의 명령어 경계를 한 번에 계산하고, 유효 명령어를 하나의 열로 모은다. 각 명령어는 어느 블록 소속인지 표시를 가진다.</p>
 <p>다음 경우에는 두 번째 블록을 S0에서 버린다.</p>
 <ul>
 <li>첫 번째 블록의 taken 위치가 명령어 중간에 떨어진다. 예측이 틀린 경우다.</li>

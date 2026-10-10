@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>8장 · 종합 — 2T2F Book</title>
+<title>8장 · 한계와 남은 과제 — 2T2F Book</title>
 <meta name="description" content="한 사이클에 두 블록: 2-taken과 2-fetch 교과서">
 <link rel="stylesheet" href="../assets/book.css">
 </head>
@@ -11,177 +11,28 @@
 <header class="top">
   <button class="menu" aria-label="목차" onclick="document.body.classList.toggle('nav-open')">☰</button>
   <a class="brand" href="../index.html">2T2F Book</a>
-  <span class="topline">8장 · 종합</span>
+  <span class="topline">8장 · 한계와 남은 과제</span>
 </header>
 <div class="layout">
 <nav class="side">
   <div class="side-title">한 사이클에 두 블록: 2-taken과 2-fetch 교과서</div>
-  <ul><li><a href="../index.html">이 책을 읽는 법</a></li><li><a href="../chapters/ch1.html"><span class="n">1장</span> 블록 하나로는 왜 부족한가</a></li><li><a href="../chapters/ch2.html"><span class="n">2장</span> 기존 frontend는 어떻게 움직이는가</a></li><li><a href="../chapters/ch3.html"><span class="n">3장</span> 무엇을 바꿨나</a></li><li><a href="../chapters/ch4.html"><span class="n">4장</span> 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기</a></li><li><a href="../chapters/ch5.html"><span class="n">5장</span> 2-fetch: 캐시와 IFU가 블록 두 개를 한 번에 다루기</a></li><li><a href="../chapters/ch6.html"><span class="n">6장</span> 두 기능이 만나는 곳</a></li><li><a href="../chapters/ch7.html"><span class="n">7장</span> 숫자 읽는 법</a></li><li><a href="../chapters/ch8.html" class=cur><span class="n">8장</span> 종합</a></li></ul>
+  <ul><li><a href="../index.html">이 책을 읽는 법</a></li><li><a href="../chapters/ch0.html"><span class="n">들어가며</span> 왜 한 사이클에 두 블록인가</a></li><li><a href="../chapters/ch1.html"><span class="n">1장</span> 블록 하나로는 왜 부족한가</a></li><li><a href="../chapters/ch2.html"><span class="n">2장</span> 기존 frontend는 어떻게 움직이는가</a></li><li><a href="../chapters/ch3.html"><span class="n">3장</span> 무엇을 바꿨나</a></li><li><a href="../chapters/ch4.html"><span class="n">4장</span> 2-taken: 예측기를 두 번 읽지 않고 분기 두 개를 맞히기</a></li><li><a href="../chapters/ch5.html"><span class="n">5장</span> 2-fetch: 캐시와 IFU가 블록 두 개를 한 번에 다루기</a></li><li><a href="../chapters/ch6.html"><span class="n">6장</span> 두 기능이 만나는 곳</a></li><li><a href="../chapters/ch7.html"><span class="n">7장</span> 숫자 읽는 법</a></li><li><a href="../chapters/ch8.html" class=cur><span class="n">8장</span> 한계와 남은 과제</a></li></ul>
   <div class="side-foot"><a href="https://github.com/star007kdh-proj/2T2F-book">소스</a></div>
 </nav>
 <main class="content">
-<h1>8장 · 종합</h1>
-<h2>8.1 파라미터</h2>
-<table>
-<thead>
-<tr>
-<th>이름</th>
-<th>기본값</th>
-<th>의미</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>EnableTwoTaken</td>
-<td>false</td>
-<td>2-taken 전체 스위치. false면 pair 관련 필드가 생성되지 않는다</td>
-</tr>
-<tr>
-<td>uBTB NumEntries</td>
-<td>64</td>
-<td>uBTB 엔트리 수</td>
-</tr>
-<tr>
-<td>PairConfWidth</td>
-<td>4</td>
-<td>confidence 비트 수</td>
-</tr>
-<tr>
-<td>PairDirectConfThreshold</td>
-<td>2</td>
-<td>BR2가 direct jump일 때 발화 문턱</td>
-</tr>
-<tr>
-<td>PairCondConfThreshold</td>
-<td>4</td>
-<td>BR2가 conditional일 때 발화 문턱</td>
-</tr>
-<tr>
-<td>PairPrefetchHungryDist</td>
-<td>0</td>
-<td>fetch hungry 조건의 거리. 0이면 꺼짐</td>
-</tr>
-<tr>
-<td>FetchPorts</td>
-<td>2</td>
-<td>2면 2-fetch 사용, 1이면 기존 동작</td>
-</tr>
-</tbody>
-</table>
-<h2>8.2 주요 perf counter</h2>
-<table>
-<thead>
-<tr>
-<th>묶음</th>
-<th>카운터</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>학습</td>
-<td>pairPromote, pairContentKill, pairFastTrainKill, pairSecondMispHit</td>
-</tr>
-<tr>
-<td>발화</td>
-<td>pairFire, pairBlockedByConf, pairBlockedByS3Override</td>
-</tr>
-<tr>
-<td>정합</td>
-<td>pairSecondTrainSuppressed, abtbTrainDroppedPairSkipMeta, ifuRedirectTargetMemFix</td>
-</tr>
-<tr>
-<td>2-fetch</td>
-<td>WayLookup의 perf_canNotServeTwoMeta, perf_dataSramReadConflict, perf_hasMmio, perf_hasItlbException</td>
-</tr>
-</tbody>
-</table>
-<h2>8.3 알려진 한계</h2>
+<h1>8장 · 한계와 남은 과제</h1>
+<p>이 책이 설명한 구현은 완성이 아니다. 알려진 한계를 적고, 책 전체를 다섯 문장으로 닫는다.</p>
+<h2>8.1 알려진 한계</h2>
 <ul>
-<li>pair second 블록은 S3 예측기를 거치지 않는다. BR2가 틀리면 backend redirect까지 기다려야 한다.</li>
+<li>pair second 블록은 S3 예측기를 거치지 않는다. BR2가 틀리면 backend redirect까지 기다려야 한다. 2장 실험 2의 13 사이클이다.</li>
 <li>GHR에 BR2를 넣을 때 블록 B를 분기 1개짜리 블록으로 취급한다. 블록 B 안에서 BR2 앞에 있는 not taken 분기는 반영되지 않는다.</li>
 <li>pair가 발화하는 동안에는 BR2가 S3를 지나지 않아 confidence가 더 오르지 않는다. 문턱은 발화 전 확인 횟수만 조절한다.</li>
-<li>S1 pair 결정 경로(그림 4-3의 빨간 경로)는 타이밍이 빠듯하다. 개선은 <code>timing/2-taken-s1-pair</code> 브랜치에서 다룬다.</li>
+<li>S1 pair 결정 경로(그림 4-3의 빨간 경로)는 타이밍이 빠듯하다. 개선은 별도 작업으로 진행 중이다.</li>
 <li>fetch hungry 조건은 기본값이 꺼져 있다. 적정 거리는 아직 정하지 않았다.</li>
-<li>두 번째 블록만 flush되는 경우를 ICache와 IFU에서 직접 처리하는 수정(2에서 1로 즉시 강등)은 <code>feat/p3_2taken_2fetch</code>에만 있고 기준 브랜치에는 없다. 기준 브랜치는 guard로 이 경우를 막는다.</li>
+<li>두 번째 블록만 flush되는 경우를 ICache와 IFU에서 직접 처리하는 길(2에서 1로 즉시 강등)은 기준 코드에 없다. 기준 코드는 guard로 그 경우 자체를 막는다.</li>
+<li>7장의 측정값이 비어 있다. 그래프 요청 ①, ②, ③이 채워져야 "얼마나"에 답할 수 있다.</li>
 </ul>
-<h2>8.4 파일 맵</h2>
-<table>
-<thead>
-<tr>
-<th>파일</th>
-<th>내용</th>
-<th>장·절</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>frontend/bpu/ubtb/MicroBtb.scala</code>, <code>Bundles.scala</code></td>
-<td>pair 엔트리, lookup, chain 학습, 무효화</td>
-<td>4.2, 4.3</td>
-</tr>
-<tr>
-<td><code>frontend/bpu/Bpu.scala</code></td>
-<td>emit gate, aBTB 억제와 일치 비교, pair payload, second 엔트리 meta</td>
-<td>4.4, 4.7</td>
-</tr>
-<tr>
-<td><code>frontend/bpu/Parameters.scala</code></td>
-<td>pair 파라미터</td>
-<td>8.1</td>
-</tr>
-<tr>
-<td><code>frontend/bpu/history/phr/Phr.scala</code></td>
-<td>PHR 2단 shift, folded history</td>
-<td>4.6</td>
-</tr>
-<tr>
-<td><code>frontend/bpu/history/commonhr/CommonHR.scala</code></td>
-<td>GHR, BW, IMLI의 BR2 반영</td>
-<td>4.6</td>
-</tr>
-<tr>
-<td><code>frontend/bpu/ras/Ras.scala</code>, <code>RasStack.scala</code></td>
-<td>push 이후 RAS meta</td>
-<td>4.6</td>
-</tr>
-<tr>
-<td><code>frontend/ftq/Ftq.scala</code></td>
-<td>이중 enqueue, isPairSecond, guard, 2-prefetch와 2-fetch 발행, targetMem 구동</td>
-<td>4.5, 5.2, 6.3</td>
-</tr>
-<tr>
-<td><code>frontend/TwoFetch.scala</code></td>
-<td>TwoPrefetchCase</td>
-<td>5.3</td>
-</tr>
-<tr>
-<td><code>frontend/icache/ICachePrefetchPipe.scala</code></td>
-<td>2-prefetch 처리</td>
-<td>5.3</td>
-</tr>
-<tr>
-<td><code>frontend/icache/ICacheWayLookup.scala</code></td>
-<td>2 write, 2 read, realTwoFetchValid</td>
-<td>5.4</td>
-</tr>
-<tr>
-<td><code>frontend/icache/ICacheMainPipe.scala</code></td>
-<td>req(0), req(1) 처리</td>
-<td>5.4</td>
-</tr>
-<tr>
-<td><code>frontend/ifu/Ifu.scala</code>, <code>InstrCompact.scala</code></td>
-<td>두 블록 병합, 블록별 검사</td>
-<td>5.5</td>
-</tr>
-<tr>
-<td><code>backend/CtrlBlock.scala</code></td>
-<td>pcMem 두 번째 write port, targetMem</td>
-<td>6.3</td>
-</tr>
-</tbody>
-</table>
-<h2>8.5 책 전체를 다섯 문장으로</h2>
+<h2>8.2 책 전체를 다섯 문장으로</h2>
 <ol>
 <li>fetch block의 크기는 프로그램의 분기가 정하므로, frontend는 블록 수를 늘리는 수밖에 없다.</li>
 <li>2-taken은 첫 블록의 uBTB 엔트리에 둘째 분기를 적어 두어, 예측기를 한 번만 읽고 분기 둘을 예측한다. 그 대가로 둘째 분기의 종류를 제한하고 틀리면 즉시 버린다.</li>

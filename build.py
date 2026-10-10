@@ -29,12 +29,13 @@ MD_EXT = ["tables", "md_in_html", "sane_lists", "attr_list"]
 
 def split_chapters(text):
     """Return (front, [(num, title, body), ...]). Chapters are separated by '---' + '## N장 · 제목'."""
-    parts = re.split(r"\n---\n\n(?=## \d+장 · )", text)
+    parts = re.split(r"\n---\n\n(?=## (?:\d+장|들어가며) · )", text)
     front = parts[0]
     chapters = []
     for part in parts[1:]:
-        m = re.match(r"## (\d+)장 · (.+)\n", part)
-        num, title = int(m.group(1)), m.group(2).strip()
+        m = re.match(r"## (\d+장|들어가며) · (.+)\n", part)
+        num = 0 if m.group(1) == "들어가며" else int(m.group(1)[:-1])
+        title = m.group(2).strip()
         body = part[m.end():]
         chapters.append((num, title, body))
     return front, chapters
@@ -59,12 +60,16 @@ def render_md(md_text):
     return markdown.markdown(md_text, extensions=MD_EXT)
 
 
+def chap_label(num):
+    return "들어가며" if num == 0 else f"{num}장"
+
+
 def nav_html(chapters, current, depth):
     pre = "../" if depth else ""
-    items = [f'<li><a href="{pre}index.html"{" class=cur" if current == 0 else ""}>이 책을 읽는 법</a></li>']
+    items = [f'<li><a href="{pre}index.html"{" class=cur" if current == -1 else ""}>이 책을 읽는 법</a></li>']
     for num, title, _ in chapters:
         cls = " class=cur" if current == num else ""
-        items.append(f'<li><a href="{pre}chapters/ch{num}.html"{cls}><span class="n">{num}장</span> {html.escape(title)}</a></li>')
+        items.append(f'<li><a href="{pre}chapters/ch{num}.html"{cls}><span class="n">{chap_label(num)}</span> {html.escape(title)}</a></li>')
     return "<ul>" + "".join(items) + "</ul>"
 
 
@@ -117,13 +122,13 @@ def main():
     front_md = front_md.replace("## 이 책을 읽는 법", "## 이 책을 읽는 법")
     # link chapter table rows to pages
     def link_row(m):
-        num = int(m.group(1))
-        return f'| [{num}](chapters/ch{num}.html) | [{m.group(2)}](chapters/ch{num}.html) |'
-    front_md = re.sub(r"^\| (\d+) \| ([^|]+?) \|", link_row, front_md, flags=re.M)
+        num = 0 if m.group(1) == "들어가며" else int(m.group(1))
+        return f'| [{m.group(1)}](chapters/ch{num}.html) | [{m.group(2)}](chapters/ch{num}.html) |'
+    front_md = re.sub(r"^\| (\d+|들어가며) \| ([^|]+?) \|", link_row, front_md, flags=re.M)
     front_html = render_md(front_md)
     first = chapters[0]
-    out = page(f"{SITE_TITLE} · {SITE_SUBTITLE}", "이 책을 읽는 법", front_html, chapters, 0, 0,
-               (None, (f"chapters/ch{first[0]}.html", f"{first[0]}장 · {first[1]}")))
+    out = page(f"{SITE_TITLE} · {SITE_SUBTITLE}", "이 책을 읽는 법", front_html, chapters, -1, 0,
+               (None, (f"chapters/ch{first[0]}.html", f"{chap_label(first[0])} · {first[1]}")))
     io.open(os.path.join(ROOT, "index.html"), "w", encoding="utf-8", newline="\n").write(out)
 
     # ---- chapters ----
@@ -132,11 +137,11 @@ def main():
         body = insert_widgets(body)
         body = demote(body)
         body = body.replace("](figures/", "](../figures/")
-        body_md = f"# {num}장 · {title}\n" + body
+        body_md = f"# {chap_label(num)} · {title}\n" + body
         body_html = render_md(body_md)
-        prev = ("index.html", "이 책을 읽는 법") if i == 0 else (f"chapters/ch{chapters[i-1][0]}.html", f"{chapters[i-1][0]}장 · {chapters[i-1][1]}")
-        nxt = None if i == len(chapters) - 1 else (f"chapters/ch{chapters[i+1][0]}.html", f"{chapters[i+1][0]}장 · {chapters[i+1][1]}")
-        out = page(f"{num}장 · {title} — {SITE_TITLE}", f"{num}장 · {title}", body_html, chapters, num, 1, (prev, nxt))
+        prev = ("index.html", "이 책을 읽는 법") if i == 0 else (f"chapters/ch{chapters[i-1][0]}.html", f"{chap_label(chapters[i-1][0])} · {chapters[i-1][1]}")
+        nxt = None if i == len(chapters) - 1 else (f"chapters/ch{chapters[i+1][0]}.html", f"{chap_label(chapters[i+1][0])} · {chapters[i+1][1]}")
+        out = page(f"{chap_label(num)} · {title} — {SITE_TITLE}", f"{chap_label(num)} · {title}", body_html, chapters, num, 1, (prev, nxt))
         io.open(os.path.join(ROOT, "chapters", f"ch{num}.html"), "w", encoding="utf-8", newline="\n").write(out)
         print(f"ch{num}: {title}")
     print("index.html")

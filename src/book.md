@@ -6,21 +6,21 @@
 
 이 책은 그 간격을 어떻게 메웠는지를 다룬다. 2-taken은 한 사이클에 taken 분기 두 개를 예측한다. 2-fetch는 한 사이클에 fetch block 두 개를 캐시에서 꺼낸다. 두 기능은 따로 설계됐지만 함께 있어야 효과가 난다.
 
-같은 내용을 발표 자료 형식으로 정리한 문서가 `docs/2T2F_INTRO_KR.md`에 있다. 이 책은 그 문서의 내용을 장 단위로 다시 쓴 것이다. 수치와 코드 위치는 두 문서가 같은 기준을 따른다.
+같은 내용을 발표 자료 형식으로 정리한 문서(2-taken / 2-fetch 구현 소개)가 따로 있다. 이 책은 그 문서를 장 단위로 다시 쓴 것이다. 파라미터 이름, 성능 카운터, 파일 위치 같은 세부는 그 문서에 두고, 이 책은 구조와 이유만 다룬다.
 
 ## 이 책을 읽는 법
 
 **대상.** Kunminghu V3 frontend 코드를 읽을 수 있는 팀원. BPU, FTQ, ICache, IFU라는 이름이 낯설지 않으면 충분하다.
 
-**기준 코드.** 본문은 `feat/p3_2taken_backend_targetmem`을 기준으로 설명한다. 2-taken, 2-fetch, targetMem이 모두 들어 있는 브랜치다. 이후 브랜치에서 바뀐 파라미터나 게이트는 이 책의 범위 밖이다.
+**기준 코드.** 2-taken, 2-fetch, targetMem이 모두 들어 있는 구현을 기준으로 설명한다. 그 뒤에 바뀐 파라미터나 학습 조건은 이 책의 범위 밖이다.
 
 **실험.** 각 장에는 "실험"이 있다. 종이와 연필로 돌려 볼 수 있는 축소 모델이다. 실제 RTL의 측정값이 아니다. 실험마다 "설명용 모델"이라는 고지를 붙였고, 실측치는 조건과 함께 따로 표시한다.
 
 **숫자.** 이 책은 숫자를 인용할 때 항상 조건을 함께 적는다. 조건이 다른 숫자끼리 순위를 매기지 않는다.
 
-**그림.** 그림은 `docs/figures/` 아래에 있다. `gen_2t2f_figures.py`를 실행하면 다시 만들 수 있다. 캡션은 "그림 장-번호" 형식이다.
+**그림.** 캡션은 "그림 장-번호" 형식이다. 모델로 그린 그림에는 "설명용"이라고 적었다.
 
-**고정 용어.** 책 전체에서 다음 이름을 쓴다.
+**고정 용어.** 책 전체에서 다음 이름을 쓴다. 블록 A, B, C가 무엇인지는 들어가며의 그림 0-2에서 먼저 설명한다.
 
 | 이름 | 뜻 |
 |---|---|
@@ -34,6 +34,7 @@
 
 | 장 | 제목 | 질문 |
 |---|---|---|
+| 들어가며 | 왜 한 사이클에 두 블록인가 | 무엇이 부족했고, 블록 A, B, C는 무엇인가 |
 | 1 | 블록 하나로는 왜 부족한가 | 사이클당 명령어 공급량은 무엇이 정하는가 |
 | 2 | 기존 frontend는 어떻게 움직이는가 | 예측과 fetch는 어디서 만나고 어디서 틀리는가 |
 | 3 | 무엇을 바꿨나 | 열 곳의 변경을 한 장의 지도로 보기 |
@@ -41,7 +42,79 @@
 | 5 | 2-fetch | 캐시와 IFU가 블록 두 개를 어떻게 한 번에 다루는가 |
 | 6 | 두 기능이 만나는 곳 | 따로 설계한 둘이 충돌하는 지점은 어디인가 |
 | 7 | 숫자 읽는 법 | 얼마나 빨라지는가, 어떻게 재는가 |
-| 8 | 종합 | 파라미터, 카운터, 한계, 파일 |
+| 8 | 한계와 남은 과제 | 아직 못 한 것은 무엇인가 |
+
+---
+
+## 들어가며 · 왜 한 사이클에 두 블록인가
+
+Kunminghu V3의 backend는 사이클마다 명령어 8개를 decode하고 rename하고 commit한다. 그 폭을 채우는 일은 frontend의 몫이다. 그런데 frontend는 사이클마다 fetch block 하나만 내보낸다. 블록이 길면 문제가 없다. 블록이 짧으면 backend는 8개를 받을 자리를 비워 둔 채 한두 개만 받는다.
+
+이 장은 그 "짧은 블록"이 얼마나 흔하고, 왜 기존 수단으로는 해결되지 않으며, 그래서 왜 블록 수를 둘로 늘리는 길을 택했는지를 설명한다. 뒤 장에서 계속 나오는 블록 A, B, C라는 이름도 여기서 정한다.
+
+**이 장에서 배우는 것**
+
+* frontend 공급량의 병목이 바이트 폭이 아니라 "사이클당 블록 수"라는 점을 설명할 수 있다.
+* fetch 폭 확대, 예측기 2회 읽기, 큐 확대가 왜 답이 되지 못하는지 말할 수 있다.
+* 블록 A, B, C, BR1, BR2, first/second, fb0/fb1이 각각 무엇을 가리키는지 그림으로 설명할 수 있다.
+
+### 블록은 taken 분기에서 끝난다
+
+frontend는 연속한 주소의 명령어를 한 덩어리로 가져온다. 이 덩어리가 fetch block이다. 덩어리는 두 가지 이유로 끝난다. 64바이트 한계에 닿거나, taken 분기를 만나거나다. taken 분기 뒤의 명령어는 다른 주소에 있으므로 같은 덩어리에 담을 수 없다.
+
+그래서 블록의 길이를 정하는 것은 프로그램이다. 정수 코드에서는 명령어 대여섯 개마다 분기가 하나 있고, 그중 상당수가 taken이다. 워크로드마다 다르지만 taken 분기 사이의 거리가 명령어 10개 안쪽인 구간이 흔하다. 이 구간에서 블록 하나는 decode 폭 8을 채우지 못한다.
+
+> **그래프 요청 ①.** 워크로드별 fetch block당 명령어 수 분포(히스토그램). 블록이 8개 미만인 비율이 얼마나 되는지가 이 장의 핵심 근거가 된다. 2-taken, 2-fetch를 끈 설정으로 측정한 값을 넣는다.
+
+### 바이트가 아니라 블록 수가 병목이다
+
+![그림 0-1](figures/fig17_supply_model.png)
+
+**그림 0-1.** taken 분기 간격에 따른 사이클당 공급량. 설명용 모델이며, 매 사이클 pair가 발화하고 ICache miss와 redirect가 없다고 가정한다.
+
+**그림 읽는 법.** 가로축은 블록 하나의 길이다. 회색 선이 기존 구조다. 길이가 8 미만이면 아무리 예측이 정확하고 캐시가 hit해도 decode 폭을 채우지 못한다. 블록 수가 사이클당 하나로 고정되어 있기 때문이다. 파란 선은 사이클당 블록을 둘까지 허용했을 때다. 색칠한 영역이 그 차이다.
+
+이 그림이 말하는 것은 하나다. 짧은 블록이 연속되는 구간에서는 fetch 폭을 늘려도 소용이 없다. 64바이트를 가져올 수 있어도 taken 분기가 그 안에서 블록을 잘라 버린다. 늘려야 하는 것은 사이클당 블록 수다.
+
+> **그래프 요청 ②.** top-down 분석에서 frontend-bound로 분류된 사이클 비율(워크로드별, 2-taken과 2-fetch를 끈 기준). 이 비율이 2-taken, 2-fetch가 되찾을 수 있는 상한이다.
+
+### 왜 다른 길이 아니었나
+
+| 후보 | 왜 부족한가 |
+|---|---|
+| fetch 폭을 64바이트보다 넓힌다 | 블록은 taken 분기에서 끝난다. 바이트가 아니라 블록 수가 모자라므로 효과가 없다 |
+| 예측기를 한 사이클에 두 번 읽는다 | 모든 예측기 SRAM에 읽기 포트가 하나 더 필요하다. 면적과 타이밍 비용이 크고, 두 번째 읽기의 history가 첫 번째 결과에 의존해 한 사이클에 끝나지 않는다 |
+| FTQ, IBuffer를 키운다 | 큐는 공급의 요동을 흡수할 뿐 평균 공급량을 올리지 못한다. 평균이 모자란 구간에서는 큐가 비어 간다 |
+| 두 번째 분기를 첫 블록의 예측에 함께 실어 보낸다 | 예측기는 한 번만 읽는다. 대신 두 번째 분기의 종류를 제한하고 틀리면 바로 버린다. 이 책이 다루는 2-taken이다 |
+
+사이클당 taken 분기 둘을 예측하는 것은 상용 고성능 코어도 택한 방향이다. 공개 자료 기준으로 AMD Zen 5가 "2-ahead branch predictor"로 사이클당 taken 분기 둘을 예측한다고 밝혔다. 조건과 구현은 다르므로 수치는 비교하지 않는다.
+
+예측 쪽만 늘리면 FTQ에 엔트리가 쌓이기만 한다. 그래서 fetch 쪽도 한 사이클에 블록 둘을 다루도록 바꿨다. 이것이 2-fetch다. 둘은 짝이어야 한다. 1장에서 다시 다룬다.
+
+### 블록 A, B, C는 무엇인가
+
+이 책은 블록을 A, B, C라는 이름으로 부른다. 세 블록은 메모리에서 이웃한 블록이 아니라, **실행 순서로 이어진** 블록이다.
+
+![그림 0-2](figures/fig16_blocks_abc.png)
+
+**그림 0-2.** 블록 A, B, C와 BR1, BR2. 아래 표는 같은 세 블록이 BPU, FTQ, ICache에서 어떤 이름으로 불리는지 보여 준다.
+
+**그림 읽는 법.** 위쪽 띠가 코드다. 블록 A는 첫 taken 분기 BR1에서 끝난다. BR1의 target이 블록 B의 시작 PC다. 블록 B는 BR2에서 끝나고, BR2의 target이 블록 C의 시작 PC다. D, E, F는 같은 식으로 이어지는 그다음 블록들이다.
+
+아래쪽 표가 이름의 대응이다.
+
+* **BPU 예측.** 기존에는 사이클마다 블록 하나를 예측한다. A, B, C 순서다. pair 예측은 블록 A를 볼 때 BR1과 BR2를 함께 내보낸다. 그러면 블록 B는 예측하지 않고 건너뛰어 다음 사이클에 블록 C로 간다.
+* **FTQ 엔트리.** pair 예측 한 번이 FTQ에 엔트리 둘을 만든다. 블록 A가 들어간 엔트리를 **first**, 블록 B가 들어간 엔트리를 **second**라 부른다.
+* **ICache와 IFU 요청.** 2-fetch는 요청 하나에 블록 둘을 싣는다. 앞의 것을 **fb0**, 뒤의 것을 **fb1**이라 부른다. fb0, fb1이 꼭 first, second와 같은 짝일 필요는 없다. 5장에서 설명한다.
+
+이름이 셋인 이유는 세 곳의 관심이 다르기 때문이다. BPU는 "어느 분기를 예측했는가", FTQ는 "어느 엔트리가 pair로 들어왔는가", ICache는 "요청 하나에 블록이 몇 개인가"를 본다.
+
+### 핵심 정리
+
+1. backend는 8-wide인데 frontend는 사이클당 블록 하나다. 블록이 짧으면 backend가 굶는다.
+2. 블록은 taken 분기에서 끝나므로 병목은 바이트 폭이 아니라 사이클당 블록 수다.
+3. fetch 폭 확대, 예측기 2회 읽기, 큐 확대는 답이 아니다. 두 번째 분기를 첫 블록 예측에 실어 보내고, fetch도 블록 둘을 다루게 하는 것이 2-taken과 2-fetch다.
+4. 블록 A, B, C는 실행 순서로 이어진 블록이다. 같은 블록을 BPU는 BR1/BR2, FTQ는 first/second, ICache는 fb0/fb1로 부른다.
 
 ---
 
@@ -121,7 +194,7 @@ fetch block은 2바이트 단위의 임의 주소에서 시작한다. 끝은 두
 
 ## 2장 · 기존 frontend는 어떻게 움직이는가
 
-뒤 장을 읽는 데 필요한 만큼만 정리한다. 이미 아는 독자는 2.5절의 손실 사이클 표만 보고 넘어가도 된다.
+뒤 장을 읽는 데 필요한 만큼만 정리한다. 이미 아는 독자는 실험 2의 손실 사이클 표만 보고 넘어가도 된다.
 
 **이 장에서 배우는 것**
 
@@ -295,13 +368,13 @@ BR2가 틀리면 backend redirect로만 교정된다. 2장 실험 2의 13 사이
 uBTB는 64 엔트리 fully associative 레지스터 배열이다. 조합 논리로 같은 사이클에 결과가 나온다. 엔트리의 slot1에 BR1, slot2에 BR2를 저장한다. 엔트리 하나는 92비트다. attribute는 branchType 2비트와 rasAction 2비트, confidence는 4비트다.
 
 
-블록 B의 시작 PC는 slot1의 target과 같다. 따로 저장하지 않는다. tag가 맞으면 slot1은 기존 single 예측으로 나가고, slot1과 slot2 묶음은 별도 출력(pairPrediction)으로 나간다.
+블록 B의 시작 PC는 slot1의 target과 같다. 따로 저장하지 않는다. tag가 맞으면 slot1은 기존 single 예측으로 나가고, slot1과 slot2 묶음은 별도의 pair 출력으로 나간다.
 
 한 가지 검사가 lookup 단계에 들어 있다. BR2 위치가 블록 B의 페이지를 넘어가면 pair 출력을 내지 않는다. ICache가 페이지를 넘는 블록을 받지 않기 때문이다. 블록 B는 BPU의 페이지 절단 로직을 지나지 않으므로 여기서 직접 막아야 한다(6.2).
 
 ### 4.3 pair는 어떻게 배우는가
 
-학습 입력은 **fastTrain**이다. S3 최종 예측으로 uBTB를 바로 학습시키는 기존 경로다. 연속한 두 fastTrain이 다음을 모두 만족하면 **chain**으로 본다.
+학습 입력은 S3 최종 예측이다. S3이 블록 하나를 끝낼 때마다 그 결과가 uBTB로 바로 전달되는 기존의 빠른 학습 경로를 그대로 쓴다. 연속한 두 학습 입력이 다음을 모두 만족하면 **chain**으로 본다.
 
 1. 앞 블록의 예측이 taken이다.
 2. 뒤 블록의 시작 PC가 앞 블록의 target과 같다.
@@ -309,7 +382,7 @@ uBTB는 64 엔트리 fully associative 레지스터 배열이다. 조합 논리�
 4. 앞 분기가 return이나 indirect가 아니다.
 5. 앞 블록의 uBTB 엔트리가 존재하고 slot1 내용이 앞 분기와 일치한다. tag aliasing을 막는다.
 
-앞 블록 정보는 fastTrain이 비는 사이클에도 유지되고, redirect가 오면 지워진다. redirect를 사이에 둔 두 블록이 pair로 학습되는 일은 없다.
+앞 블록 정보는 학습 입력이 없는 사이클에도 유지되고, redirect가 오면 지워진다. redirect를 사이에 둔 두 블록이 pair로 학습되는 일은 없다.
 
 **slot2 갱신 규칙**
 
@@ -318,15 +391,15 @@ uBTB는 64 엔트리 fully associative 레지스터 배열이다. 조합 논리�
 | chain이고 slot2가 비어 있다 | slot2에 BR2를 쓰고 confidence를 1로 둔다 |
 | chain이고 slot2 내용(위치, 속성, target)이 같다 | confidence를 1 올린다 |
 | chain이지만 slot2 내용이 다르다 | slot2를 즉시 무효화한다 |
-| 뒤 블록이 not taken이거나 call, return, indirect다 | slot2를 즉시 무효화한다(fastTrainKill) |
-| BR1 자체가 달라지거나 not taken으로 학습된다 | slot1을 다시 쓰고 slot2를 무효화한다(firstKill) |
-| backend redirect가 pair second 엔트리에 떨어진다 | slot2를 즉시 무효화한다(mispKill) |
+| 뒤 블록이 not taken이거나 call, return, indirect다 | slot2를 즉시 무효화한다 |
+| BR1 자체가 달라지거나 not taken으로 학습된다 | slot1을 다시 쓰고 slot2를 무효화한다 |
+| backend redirect가 pair second 엔트리에 떨어진다 | slot2를 즉시 무효화한다 |
 
 감소가 없다. 틀리면 바로 버린다. 이것을 **kill only**라 부른다. confidence의 뜻이 그래서 단순하다. "연속으로 몇 번 깨끗하게 확인됐는가"다. 불안정한 pair가 문턱 근처에서 오르내리며 계속 발화하는 일을 막는다. 무효화는 일반 엔트리 갱신보다 뒤에 적용되어 같은 사이클 충돌에서 항상 이긴다.
 
 ### 실험 3 · confidence를 따라가 보기
 
-**설명용 모델.** 블록 A의 slot1은 이미 BR1로 채워져 있고, 문턱은 direct 2, conditional 4라고 놓는다. 한 줄이 fastTrain 한 쌍이다.
+**설명용 모델.** 블록 A의 slot1은 이미 BR1로 채워져 있고, 문턱은 direct 2, conditional 4라고 놓는다. 한 줄이 연속한 학습 입력 한 쌍이다.
 
 | 순서 | 뒤 블록의 결과 | slot2 | confidence | 발화 가능 (BR2 direct) |
 |---|---|---|---|---|
@@ -343,7 +416,7 @@ uBTB는 64 엔트리 fully associative 레지스터 배열이다. 조합 논리�
 
 ### 4.4 발화는 언제 하는가
 
-블록 A가 S1에 있는 사이클에 `s1_usePair`가 다음을 모두 확인한다.
+블록 A가 S1에 있는 사이클에 발화 조건 일곱 가지를 모두 확인한다.
 
 1. uBTB에서 pair가 hit한다.
 2. confidence가 문턱 이상이다. BR2가 direct jump면 2, conditional이면 4다.
@@ -367,7 +440,7 @@ uBTB는 64 엔트리 fully associative 레지스터 배열이다. 조합 논리�
 
 **그림 4-3.** S1 pair 결정의 레지스터 경계 경로. 빨간 경로가 가장 길다.
 
-**그림 읽는 법.** aBTB 출력에서 일치 비교를 거쳐 `s1_usePair`가 되고, 이것이 다음 시작 PC 선택으로 이어진다. 조건 5가 이 경로에 있다. 타이밍 개선은 `timing/2-taken-s1-pair` 브랜치에서 따로 다룬다.
+**그림 읽는 법.** aBTB 출력에서 일치 비교를 거쳐 발화 결정이 되고, 이것이 다음 시작 PC 선택으로 이어진다. 조건 5가 이 경로에 있다. 이 경로의 타이밍 개선은 별도 작업으로 진행 중이며 이 책의 범위 밖이다.
 
 ### 4.5 FTQ에 두 칸을 한 번에 쓰기
 
@@ -379,7 +452,7 @@ pair fire 사이클에 slot k와 slot k+1을 함께 쓰고 bpuPtr를 2 올린다
 
 second 엔트리는 나중에 다른 엔트리를 참조하지 않아도 되도록 필요한 정보를 스스로 가진다.
 
-* **isPairSecond 표시.** 어떤 enqueue든 그 자리를 다시 쓰면 지워진다.
+* **pair second 표시.** 어떤 enqueue든 그 자리를 다시 쓰면 지워진다.
 * **pair first의 시작 PC.** uBTB에서 해당 엔트리를 찾아 무효화할 때 tag로 쓴다.
 * **BR1까지만 반영된 redirect meta.** 4.6에서 설명한다.
 
@@ -431,7 +504,7 @@ slot A에는 direct call이 올 수 있다. 이때 second 엔트리의 meta는 p
 
 aBTB는 ahead 구조다. 블록을 처리하는 동안 다음 블록용 읽기를 한 사이클 먼저 시작한다. pair fire는 블록 B를 건너뛰므로 이 사슬이 한 번 끊긴다. pair fire 다음 사이클의 aBTB 출력은 블록 A 기준으로 읽은 값이라 블록 C에 맞지 않는다.
 
-* **예측 억제.** 그 한 사이클은 aBTB 출력을 무시하고 uBTB 또는 fallthrough로 예측한다(`s1_abtbValidEffective`).
+* **예측 억제.** 그 한 사이클은 aBTB 출력을 무시하고 uBTB 또는 fallthrough로 예측한다.
 * **일관된 게이트.** emit gate, 일치 비교, PHR 입력이 모두 억제가 반영된 신호를 쓴다. 무시한 분기가 history에 들어가는 일이 없다.
 * **학습 생략.** 블록 C가 S3에 도달했을 때 aBTB 학습을 하지 않는다. 그대로 학습하면 어떤 예측도 읽지 않는 자리에 엔트리가 만들어진다.
 
@@ -441,22 +514,22 @@ aBTB는 ahead 구조다. 블록을 처리하는 동안 다음 블록용 읽기�
 |---|---|
 | 블록 A에 S3 override | bpuPtr를 되감아 두 엔트리를 모두 버린다. 교정된 예측으로 다시 진행한다 |
 | first 엔트리에 backend redirect | 일반 redirect와 같다. pair 이전 meta로 복구한다 |
-| second 엔트리에 backend redirect | isPairSecond로 식별한다. FTQ를 되감고, BR1까지 반영된 meta로 history를 복구하고, uBTB의 해당 slot2를 무효화한다 |
-| second 엔트리에 predecode redirect | 위와 같다. mBTB 무효화 요청(pdInvalidate)은 보내지 않는다. 이 엔트리에는 mBTB meta가 없다 |
+| second 엔트리에 backend redirect | pair second 표시로 식별한다. FTQ를 되감고, BR1까지 반영된 meta로 history를 복구하고, uBTB의 해당 slot2를 무효화한다 |
+| second 엔트리에 predecode redirect | 위와 같다. mBTB 무효화 요청은 보내지 않는다. 이 엔트리에는 mBTB meta가 없다 |
 
 ### 핵심 정리
 
 1. 블록 B는 예측기를 지나지 않는다. 그래서 BR2는 S3 없이 맞힐 수 있는 분기(direct jump, 항상 taken인 conditional)로 제한한다.
-2. pair는 uBTB 엔트리의 slot2에 산다. fastTrain의 연속한 두 블록이 chain 조건을 만족할 때 배운다.
+2. pair는 uBTB 엔트리의 slot2에 산다. S3 학습 입력의 연속한 두 블록이 chain 조건을 만족할 때 배운다.
 3. 학습은 kill only다. 한 번이라도 어긋나면 바로 버리고, confidence는 연속 확인 횟수를 뜻한다.
 4. pair fire 사이클에 FTQ 2칸 기록, 다음 PC를 블록 C로 선택, history 2단 갱신이 함께 일어난다.
 5. pair 1회는 single 2회와 비트 단위로 같아야 한다. PHR 2단 shift, S3에서의 GHR·BW 보충, push 이후 RAS meta가 이를 지킨다.
-6. second 엔트리는 자기 복구에 필요한 것을 스스로 가진다. isPairSecond, first의 PC, BR1까지의 meta다.
+6. second 엔트리는 자기 복구에 필요한 것을 스스로 가진다. pair second 표시, first의 PC, BR1까지의 meta다.
 
 ### 확인 퀴즈
 
 1. slot B에서 call을 제외한 이유는 무엇인가?
-2. second 엔트리에 predecode redirect가 왔을 때 pdInvalidate를 보내지 않는 이유는?
+2. second 엔트리에 predecode redirect가 왔을 때 mBTB 무효화 요청을 보내지 않는 이유는?
 3. pair fire 다음 사이클에 aBTB 출력을 무시하는 이유는? 무시하지 않으면 어떤 일이 생기는가?
 4. kill only 대신 감소 방식을 쓰면 무엇이 문제인가?
 
@@ -494,14 +567,14 @@ aBTB는 ahead 구조다. 블록을 처리하는 동안 다음 블록용 읽기�
 
 ### 5.2 FTQ는 언제 두 개를 내보내는가
 
-**2-prefetch (`canTwoPrefetch`)**
+**2-prefetch 조건**
 
 1. bpuPtr와 pfPtr의 거리가 안전거리 guard보다 크다.
 2. 두 블록이 같은 페이지에 있다. ITLB 포트를 하나만 쓰기 위함이다.
 3. 두 블록 모두 backend가 알려 준 예외 대상이 아니다.
 4. MetaArray 포트 충돌이 없다(5.3).
 
-**2-fetch (`rawTwoFetchValid`)**
+**2-fetch 조건**
 
 1. bpuPtr와 fetchPtr의 거리가 guard보다 크다.
 2. 두 블록의 크기 합이 64바이트 이하다. IFU가 한 번에 다루는 명령어 열의 크기 제한이다.
@@ -553,15 +626,15 @@ MetaArray는 set 인덱스의 짝수 bank와 홀수 bank로 나뉘어 있고 한
 
 **해 볼 것.** fb0이 line 10 안에 있고 fb1이 line 12 안에 있다고 하자. 둘 다 짝수다. Interleave가 아니고 다른 경우에도 해당하지 않으므로 Conflict다. fb1을 line 13으로 옮기면 Interleave가 된다. 이제 fb0을 line 10과 11에 걸치게 하고 fb1을 line 11 안에 두자. Overlap1이다. fb0이 읽는 두 line에 fb1이 이미 들어 있다.
 
-PrefetchPipe S1은 두 포트의 읽기 결과를 경우에 맞게 두 블록에 나눠 준다(`generateReqMetaInfo`).
+PrefetchPipe S1은 두 포트의 읽기 결과를 경우에 맞게 두 블록에 나눠 준다.
 
 ### 5.4 WayLookup과 MainPipe
 
 **WayLookup write.** 2-prefetch면 한 사이클에 엔트리 2개를 쓴다. 두 번째 포트는 첫 번째 포트와 함께만 동작한다.
 
-**WayLookup read.** fetch 요청이 오면 앞의 두 엔트리를 보고 실제로 2개를 내보낼지 정한다(`realTwoFetchValid`).
+**WayLookup read.** fetch 요청이 오면 앞의 두 엔트리를 보고 실제로 2개를 내보낼지 정한다.
 
-1. FTQ가 두 번째 블록을 유효로 보냈다(`rawTwoFetchValid`).
+1. FTQ가 두 번째 블록을 유효로 보냈다.
 2. WayLookup에 엔트리가 2개 이상 있고 갱신 중이 아니다.
 3. DataArray 읽기 충돌이 없다. 같은 bank의 같은 way를 서로 다른 set으로 읽는 경우가 충돌이다.
 4. 두 블록 모두 MMIO가 아니고 ITLB 예외가 없다.
@@ -576,7 +649,7 @@ PrefetchPipe S1은 두 포트의 읽기 결과를 경우에 맞게 두 블록에
 
 ### 5.5 IFU는 두 블록을 하나의 열로 만든다
 
-S0에서 두 블록의 명령어 경계를 한 번에 계산하고, 유효 명령어를 하나의 열로 모은다(InstrCompact). 각 명령어는 어느 블록 소속인지 표시를 가진다.
+S0에서 두 블록의 명령어 경계를 한 번에 계산하고, 유효 명령어를 하나의 열로 모은다. 각 명령어는 어느 블록 소속인지 표시를 가진다.
 
 다음 경우에는 두 번째 블록을 S0에서 버린다.
 
@@ -723,12 +796,13 @@ targetMem은 자기 엔트리의 enqueue 때 값을 쓰므로 다음 엔트리�
 
 ### 7.2 어떻게 재는가
 
-측정값은 아직 비어 있다. 채울 때는 다음 방법을 쓴다.
+측정값은 아직 비어 있다. 채울 때는 다음 셋을 같은 워크로드에서 함께 잰다.
 
-* **사이클당 공급 명령어 수** = IBuffer enqueue 명령어 수 / frontend가 예측을 낸 사이클 수. IBuffer에 `PopCount(enq valid)` 누적 카운터를 추가해 측정한다.
-* **발화율** = `pairFireToFtq` / BPU `s1_fire` 사이클 수. 위 비율의 "1 + 발화율"과 일치해야 한다.
-* **블록 수 기준 비율** = IFU `ifu_req` / IFU가 fetch를 낸 사이클 수.
-* 같은 워크로드를 `EnableTwoTaken = false`, `FetchPorts = 1`로 다시 돌려 분모와 분자를 각각 비교한다.
+* **사이클당 공급 명령어 수.** IBuffer에 들어간 명령어 수를 frontend가 예측을 낸 사이클 수로 나눈다. 2-taken과 2-fetch를 끈 설정과 켠 설정에서 각각 잰다.
+* **pair 발화율.** pair가 발화한 사이클 수를 BPU가 예측을 낸 사이클 수로 나눈다. 위 비율의 "1 + 발화율"과 맞아야 한다. 맞지 않으면 2-fetch 쪽에서 블록이 갈라지고 있다는 뜻이다.
+* **2-prefetch, 2-fetch 발동 비율.** 요청 가운데 블록 둘을 실은 비율이다. 발화율보다 낮으면 5장의 조건 중 무엇이 막는지 본다.
+
+> **그래프 요청 ③.** 2-taken과 2-fetch를 끈 설정과 켠 설정의 IPC 비교(워크로드별), 그리고 그때의 pair 발화율. config, 워크로드, 시뮬레이션 구간을 함께 적는다.
 
 측정 결과를 적을 때는 다음을 함께 적는다. config, 워크로드, 시뮬레이션 구간, IPC 변화, MPKI 변화, pair 발화율과 pair second 정확도, 2-prefetch와 2-fetch 발동 비율.
 
@@ -752,57 +826,21 @@ targetMem은 자기 엔트리의 enqueue 때 값을 쓰므로 다음 엔트리�
 
 ---
 
-## 8장 · 종합
+## 8장 · 한계와 남은 과제
 
-### 8.1 파라미터
+이 책이 설명한 구현은 완성이 아니다. 알려진 한계를 적고, 책 전체를 다섯 문장으로 닫는다.
 
-| 이름 | 기본값 | 의미 |
-|---|---|---|
-| EnableTwoTaken | false | 2-taken 전체 스위치. false면 pair 관련 필드가 생성되지 않는다 |
-| uBTB NumEntries | 64 | uBTB 엔트리 수 |
-| PairConfWidth | 4 | confidence 비트 수 |
-| PairDirectConfThreshold | 2 | BR2가 direct jump일 때 발화 문턱 |
-| PairCondConfThreshold | 4 | BR2가 conditional일 때 발화 문턱 |
-| PairPrefetchHungryDist | 0 | fetch hungry 조건의 거리. 0이면 꺼짐 |
-| FetchPorts | 2 | 2면 2-fetch 사용, 1이면 기존 동작 |
+### 8.1 알려진 한계
 
-### 8.2 주요 perf counter
-
-| 묶음 | 카운터 |
-|---|---|
-| 학습 | pairPromote, pairContentKill, pairFastTrainKill, pairSecondMispHit |
-| 발화 | pairFire, pairBlockedByConf, pairBlockedByS3Override |
-| 정합 | pairSecondTrainSuppressed, abtbTrainDroppedPairSkipMeta, ifuRedirectTargetMemFix |
-| 2-fetch | WayLookup의 perf_canNotServeTwoMeta, perf_dataSramReadConflict, perf_hasMmio, perf_hasItlbException |
-
-### 8.3 알려진 한계
-
-* pair second 블록은 S3 예측기를 거치지 않는다. BR2가 틀리면 backend redirect까지 기다려야 한다.
+* pair second 블록은 S3 예측기를 거치지 않는다. BR2가 틀리면 backend redirect까지 기다려야 한다. 2장 실험 2의 13 사이클이다.
 * GHR에 BR2를 넣을 때 블록 B를 분기 1개짜리 블록으로 취급한다. 블록 B 안에서 BR2 앞에 있는 not taken 분기는 반영되지 않는다.
 * pair가 발화하는 동안에는 BR2가 S3를 지나지 않아 confidence가 더 오르지 않는다. 문턱은 발화 전 확인 횟수만 조절한다.
-* S1 pair 결정 경로(그림 4-3의 빨간 경로)는 타이밍이 빠듯하다. 개선은 `timing/2-taken-s1-pair` 브랜치에서 다룬다.
+* S1 pair 결정 경로(그림 4-3의 빨간 경로)는 타이밍이 빠듯하다. 개선은 별도 작업으로 진행 중이다.
 * fetch hungry 조건은 기본값이 꺼져 있다. 적정 거리는 아직 정하지 않았다.
-* 두 번째 블록만 flush되는 경우를 ICache와 IFU에서 직접 처리하는 수정(2에서 1로 즉시 강등)은 `feat/p3_2taken_2fetch`에만 있고 기준 브랜치에는 없다. 기준 브랜치는 guard로 이 경우를 막는다.
+* 두 번째 블록만 flush되는 경우를 ICache와 IFU에서 직접 처리하는 길(2에서 1로 즉시 강등)은 기준 코드에 없다. 기준 코드는 guard로 그 경우 자체를 막는다.
+* 7장의 측정값이 비어 있다. 그래프 요청 ①, ②, ③이 채워져야 "얼마나"에 답할 수 있다.
 
-### 8.4 파일 맵
-
-| 파일 | 내용 | 장·절 |
-|---|---|---|
-| `frontend/bpu/ubtb/MicroBtb.scala`, `Bundles.scala` | pair 엔트리, lookup, chain 학습, 무효화 | 4.2, 4.3 |
-| `frontend/bpu/Bpu.scala` | emit gate, aBTB 억제와 일치 비교, pair payload, second 엔트리 meta | 4.4, 4.7 |
-| `frontend/bpu/Parameters.scala` | pair 파라미터 | 8.1 |
-| `frontend/bpu/history/phr/Phr.scala` | PHR 2단 shift, folded history | 4.6 |
-| `frontend/bpu/history/commonhr/CommonHR.scala` | GHR, BW, IMLI의 BR2 반영 | 4.6 |
-| `frontend/bpu/ras/Ras.scala`, `RasStack.scala` | push 이후 RAS meta | 4.6 |
-| `frontend/ftq/Ftq.scala` | 이중 enqueue, isPairSecond, guard, 2-prefetch와 2-fetch 발행, targetMem 구동 | 4.5, 5.2, 6.3 |
-| `frontend/TwoFetch.scala` | TwoPrefetchCase | 5.3 |
-| `frontend/icache/ICachePrefetchPipe.scala` | 2-prefetch 처리 | 5.3 |
-| `frontend/icache/ICacheWayLookup.scala` | 2 write, 2 read, realTwoFetchValid | 5.4 |
-| `frontend/icache/ICacheMainPipe.scala` | req(0), req(1) 처리 | 5.4 |
-| `frontend/ifu/Ifu.scala`, `InstrCompact.scala` | 두 블록 병합, 블록별 검사 | 5.5 |
-| `backend/CtrlBlock.scala` | pcMem 두 번째 write port, targetMem | 6.3 |
-
-### 8.5 책 전체를 다섯 문장으로
+### 8.2 책 전체를 다섯 문장으로
 
 1. fetch block의 크기는 프로그램의 분기가 정하므로, frontend는 블록 수를 늘리는 수밖에 없다.
 2. 2-taken은 첫 블록의 uBTB 엔트리에 둘째 분기를 적어 두어, 예측기를 한 번만 읽고 분기 둘을 예측한다. 그 대가로 둘째 분기의 종류를 제한하고 틀리면 즉시 버린다.
